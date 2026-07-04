@@ -12,15 +12,16 @@ history.
 
 ## Features
 
-- **One-click daily import** of the Excel export
+- **Drag & drop or browse** to upload the daily Excel file, all on one screen
 - **Automatic change detection** — only creates a new history entry when a
   product's location actually changes, so the history stays meaningful
   instead of duplicating the same location every day
-- **Search** by product name or part/technical code
+- **Case-insensitive search** by product name or part/technical code
 - **Full location history** per product, newest first, with the date and
   source file of each change
 - **Upload log** showing every import that's been run, with counts of new
   products and location changes
+- **Persian UI** with a modern navy/blue and white design
 - **Runs as a single `.exe`** — no Python installation needed on the
   department's computer
 - All data stored locally in a single SQLite file (`warehouse.db`) — no
@@ -30,6 +31,7 @@ history.
 
 - Python 3
 - Tkinter (GUI, built into Python)
+- tkinterdnd2 (drag-and-drop file support)
 - SQLite (local storage, built into Python)
 - openpyxl (reading `.xlsx` files)
 - PyInstaller (packaging into a standalone `.exe`)
@@ -38,14 +40,23 @@ history.
 
 ```
 warehouse_app/
-├── app.py            # Main GUI application
+├── app.py            # Main GUI application (single-page layout)
 ├── db.py             # Database layer (SQLite)
 ├── importer.py       # Excel import + change-detection logic
+├── fonts.py          # Font resolution helper (IRANSansX with fallback)
 ├── requirements.txt  # Python dependencies
 ├── build.bat          # Windows script to build the .exe
 ├── sample_data/       # Small synthetic sample files for demo purposes
 └── README.md
 ```
+
+## Font Note
+
+The UI is designed for **IRANSansX**. Since it's a licensed commercial font,
+it isn't bundled in this repo. Install it on the machine running the app to
+get the intended look (Windows: right-click the font file → Install). If it's
+not installed, the app automatically falls back to Tahoma, which also
+supports Persian text well and comes pre-installed on Windows.
 
 ## Expected Excel Format
 

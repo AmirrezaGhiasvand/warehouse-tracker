@@ -123,13 +123,19 @@ def log_upload(cur, filename, row_count, new_parts, location_changes):
 
 
 def search_parts(query):
-    """Search parts by code or name (partial, case-insensitive)."""
+    """Search parts by code or name (partial, case-insensitive).
+
+    We lower-case both the column and the query ourselves rather than
+    relying on SQLite's built-in LIKE case-folding, since that only
+    reliably covers ASCII a-z by default - fine for Latin part codes,
+    but we do it explicitly here to be safe.
+    """
     conn = get_connection()
     cur = conn.cursor()
-    like_query = f"%{query}%"
+    like_query = f"%{query.lower()}%"
     cur.execute(
         """SELECT * FROM parts
-           WHERE code LIKE ? OR name LIKE ?
+           WHERE LOWER(code) LIKE ? OR LOWER(name) LIKE ?
            ORDER BY name COLLATE NOCASE""",
         (like_query, like_query),
     )
