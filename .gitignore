@@ -1,0 +1,18 @@
+# Build artifacts
+build/
+dist/
+*.spec
+__pycache__/
+*.pyc
+
+# The local database - contains real company data, don't commit it
+warehouse.db
+
+# Real daily Excel exports - don't commit company data
+*.xlsx
+*.xls
+!sample_data/*.xlsx
+
+# OS files
+.DS_Store
+Thumbs.db
