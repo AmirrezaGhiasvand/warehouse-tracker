@@ -122,6 +122,14 @@ def log_upload(cur, filename, row_count, new_parts, location_changes):
     )
 
 
+def get_part(code):
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute("SELECT * FROM parts WHERE code = ?", (code,))
+    row = cur.fetchone()
+    conn.close()
+    return row
+
 def search_parts(query):
     """Search parts by code or name (partial, case-insensitive).
 
@@ -145,11 +153,18 @@ def search_parts(query):
 
 
 def get_history(code):
+    """Return location history for a product, newest first.
+
+    Entries where the location is empty are skipped - if a product
+    currently has no location on file, we don't want a blank row
+    cluttering the history. Older entries that DO have a location are
+    still shown.
+    """
     conn = get_connection()
     cur = conn.cursor()
     cur.execute(
         """SELECT * FROM location_history
-           WHERE code = ?
+           WHERE code = ? AND location IS NOT NULL AND TRIM(location) != ''
            ORDER BY changed_at DESC""",
         (code,),
     )
