@@ -384,7 +384,7 @@ class WarehouseApp(BaseTk):
         table_frame.pack(fill="both", expand=True, pady=(10, 0))
 
         hist_columns = ("changed_at", "location")
-        self.history_tree = ttk.Treeview(table_frame, columns=hist_columns, show="headings")
+        self.history_tree = ttk.Treeview(table_frame, columns=hist_columns, show="headings", height=18)
         hist_headings = {
             "changed_at": "تاریخ تغییر",
             "location": "موقعیت",
@@ -431,7 +431,7 @@ class WarehouseApp(BaseTk):
         table_frame.pack(fill="both", expand=True, pady=(8, 0))
 
         log_columns = ("uploaded_at", "filename", "row_count", "new_parts", "location_changes")
-        self.log_tree = ttk.Treeview(table_frame, columns=log_columns, show="headings")
+        self.log_tree = ttk.Treeview(table_frame, columns=log_columns, show="headings", height=5)
         log_headings = {
             "uploaded_at": "تاریخ/ساعت",
             "filename": "نام فایل",
