@@ -39,9 +39,27 @@ def init_db():
             name TEXT,
             model TEXT,
             current_location TEXT,
+            created_at TEXT,
             last_updated TEXT
         )
     """)
+
+    # Migration: older databases were created before "created_at" existed.
+    # Add it and backfill using each product's earliest history entry,
+    # since that row is created at the same moment the product first
+    # appears (see upsert_part below).
+    cur.execute("PRAGMA table_info(parts)")
+    existing_columns = [row["name"] for row in cur.fetchall()]
+    if "created_at" not in existing_columns:
+        cur.execute("ALTER TABLE parts ADD COLUMN created_at TEXT")
+        cur.execute("""
+            UPDATE parts
+            SET created_at = (
+                SELECT MIN(changed_at) FROM location_history
+                WHERE location_history.code = parts.code
+            )
+            WHERE created_at IS NULL
+        """)
 
     cur.execute("""
         CREATE TABLE IF NOT EXISTS location_history (
@@ -84,9 +102,9 @@ def upsert_part(cur, code, name, model, location, source_file):
     if row is None:
         # Brand new part
         cur.execute(
-            """INSERT INTO parts (code, name, model, current_location, last_updated)
-               VALUES (?, ?, ?, ?, ?)""",
-            (code, name, model, location, now),
+            """INSERT INTO parts (code, name, model, current_location, created_at, last_updated)
+               VALUES (?, ?, ?, ?, ?, ?)""",
+            (code, name, model, location, now, now),
         )
         cur.execute(
             """INSERT INTO location_history (code, location, changed_at, source_file)
@@ -167,6 +185,52 @@ def get_history(code):
            WHERE code = ? AND location IS NOT NULL AND TRIM(location) != ''
            ORDER BY changed_at DESC""",
         (code,),
+    )
+    rows = cur.fetchall()
+    conn.close()
+    return rows
+
+def get_new_parts_by_date(gregorian_date_str):
+    """Return parts first added to the system on the given Gregorian
+    date (format 'YYYY-MM-DD'), along with the location they were
+    placed in AT THAT TIME - not today's current location, which may
+    have changed since.
+    """
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute(
+        """SELECT p.code AS code, p.name AS name, p.model AS model,
+                  lh.location AS location
+           FROM parts p
+           JOIN location_history lh ON lh.code = p.code AND lh.changed_at = p.created_at
+           WHERE date(p.created_at) = ?
+           ORDER BY p.name COLLATE NOCASE""",
+        (gregorian_date_str,),
+    )
+    rows = cur.fetchall()
+    conn.close()
+    return rows
+
+
+def get_location_changes_by_date(gregorian_date_str):
+    """Return location changes (joined with the product name) that
+    happened on the given Gregorian date (format 'YYYY-MM-DD').
+
+    A brand-new part's first history entry is excluded here - that's
+    a new addition, not a "change", and is covered separately by
+    get_new_parts_by_date().
+    """
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute(
+        """SELECT lh.code AS code, p.name AS name, lh.location AS location, lh.changed_at AS changed_at
+           FROM location_history lh
+           JOIN parts p ON p.code = lh.code
+           WHERE date(lh.changed_at) = ?
+             AND lh.location IS NOT NULL AND TRIM(lh.location) != ''
+             AND date(p.created_at) != date(lh.changed_at)
+           ORDER BY p.name COLLATE NOCASE""",
+        (gregorian_date_str,),
     )
     rows = cur.fetchall()
     conn.close()
