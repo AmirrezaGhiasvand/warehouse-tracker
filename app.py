@@ -12,7 +12,7 @@ Single-page desktop app for a storage department:
 import threading
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
-
+import persian_date as pdate
 import db
 import importer
 import fonts
@@ -47,8 +47,8 @@ class WarehouseApp(BaseTk):
     def __init__(self):
         super().__init__()
         self.title(APP_TITLE)
-        self.geometry("1100x780")
-        self.minsize(900, 600)
+        self.geometry("1150x880")
+        self.minsize(950, 700)
         self.configure(bg=BG)
 
         db.init_db()
@@ -147,6 +147,11 @@ class WarehouseApp(BaseTk):
         search_card = ttk.Frame(body, style="Card.TFrame")
         search_card.pack(fill="x", pady=(0, 12))
         self._build_search_section(search_card)
+        
+        # ----- Date search card -----
+        date_card = ttk.Frame(body, style="Card.TFrame")
+        date_card.pack(fill="x", pady=(0, 12))
+        self._build_date_search_section(date_card)
 
         # ----- History (big) / Upload log (small) -----
         paned = ttk.PanedWindow(body, orient="vertical")
@@ -373,6 +378,114 @@ class WarehouseApp(BaseTk):
         self._current_code = None
         self._hide_suggestions()
         self._clear_history()
+
+    # --- Date search section (Persian calendar) ---
+    def _build_date_search_section(self, card):
+        wrapper = self._card_padding(card, pady=12)
+
+        ttk.Label(wrapper, text="جستجو بر اساس تاریخ", style="Section.TLabel").pack(anchor="e")
+        ttk.Label(
+            wrapper,
+            text="یک تاریخ را انتخاب کنید تا کالاهای جدید و تغییرات موقعیت آن روز را ببینید",
+            style="Muted.TLabel",
+        ).pack(anchor="e", pady=(2, 8))
+
+        today = pdate.today_jalali()
+
+        row = ttk.Frame(wrapper, style="Card.TFrame")
+        row.pack(fill="x")
+
+        ttk.Button(row, text="نمایش", style="Accent.TButton", command=self._search_by_date).pack(side="left")
+
+        self.day_var = tk.StringVar(value=str(today.day))
+        self.day_combo = ttk.Combobox(
+            row, textvariable=self.day_var, width=4, state="readonly", justify="center",
+            values=[str(d) for d in range(1, pdate.days_in_month(today.year, today.month) + 1)],
+        )
+        self.day_combo.pack(side="left", padx=(8, 4))
+
+        self.month_var = tk.StringVar(value=pdate.PERSIAN_MONTHS[today.month - 1])
+        self.month_combo = ttk.Combobox(
+            row, textvariable=self.month_var, width=10, state="readonly", justify="center",
+            values=pdate.PERSIAN_MONTHS,
+        )
+        self.month_combo.pack(side="left", padx=4)
+        self.month_combo.bind("<<ComboboxSelected>>", self._on_date_part_change)
+
+        self.year_var = tk.StringVar(value=str(today.year))
+        self.year_combo = ttk.Combobox(
+            row, textvariable=self.year_var, width=6, state="readonly", justify="center",
+            values=[str(y) for y in range(today.year - 5, today.year + 1)],
+        )
+        self.year_combo.pack(side="left", padx=4)
+        self.year_combo.bind("<<ComboboxSelected>>", self._on_date_part_change)
+
+        ttk.Label(row, text="تاریخ:", style="Card.TLabel").pack(side="left", padx=(0, 8))
+
+        self.date_results_label_var = tk.StringVar(value="")
+        ttk.Label(wrapper, textvariable=self.date_results_label_var, style="Muted.TLabel").pack(anchor="e", pady=(8, 4))
+
+        table_frame = ttk.Frame(wrapper, style="Card.TFrame")
+        table_frame.pack(fill="both", expand=True)
+
+        columns = ("type", "name", "code", "location")
+        self.date_results_tree = ttk.Treeview(table_frame, columns=columns, show="headings", height=8)
+        headings = {"type": "نوع", "name": "نام کالا", "code": "کد فنی", "location": "موقعیت"}
+        widths = {"type": 120, "name": 300, "code": 130, "location": 180}
+        for col in columns:
+            self.date_results_tree.heading(col, text=headings[col])
+            self.date_results_tree.column(col, width=widths[col], anchor="center")
+        self.date_results_tree.tag_configure("odd", background=ROW_ALT)
+
+        dvsb = ttk.Scrollbar(table_frame, orient="vertical", command=self.date_results_tree.yview)
+        self.date_results_tree.configure(yscrollcommand=dvsb.set)
+        self.date_results_tree.pack(side="left", fill="both", expand=True)
+        dvsb.pack(side="right", fill="y")
+
+    def _on_date_part_change(self, event):
+        year = int(self.year_var.get())
+        month = pdate.PERSIAN_MONTHS.index(self.month_var.get()) + 1
+        max_day = pdate.days_in_month(year, month)
+        self.day_combo.configure(values=[str(d) for d in range(1, max_day + 1)])
+        if int(self.day_var.get()) > max_day:
+            self.day_var.set(str(max_day))
+
+    def _search_by_date(self):
+        year = int(self.year_var.get())
+        month = pdate.PERSIAN_MONTHS.index(self.month_var.get()) + 1
+        day = int(self.day_var.get())
+        gregorian_str = pdate.jalali_to_gregorian_str(year, month, day)
+
+        for row in self.date_results_tree.get_children():
+            self.date_results_tree.delete(row)
+
+        new_parts = db.get_new_parts_by_date(gregorian_str)
+        changes = db.get_location_changes_by_date(gregorian_str)
+
+        i = 0
+        for p in new_parts:
+            tag = "odd" if i % 2 else ""
+            self.date_results_tree.insert(
+                "", "end", tags=(tag,),
+                values=("کالای جدید", p["name"], p["code"], p["location"] or "—"),
+            )
+            i += 1
+        for c in changes:
+            tag = "odd" if i % 2 else ""
+            self.date_results_tree.insert(
+                "", "end", tags=(tag,),
+                values=("تغییر موقعیت", c["name"], c["code"], c["location"]),
+            )
+            i += 1
+
+        total = len(new_parts) + len(changes)
+        if total == 0:
+            self.date_results_label_var.set(f"{day} {self.month_var.get()} {year} — هیچ موردی ثبت نشده است")
+        else:
+            self.date_results_label_var.set(
+                f"{day} {self.month_var.get()} {year} — {len(new_parts)} کالای جدید، {len(changes)} تغییر موقعیت"
+            )
+
 
     # --- History section (now the main focus of the app) ---
     def _build_history_section(self, card):
