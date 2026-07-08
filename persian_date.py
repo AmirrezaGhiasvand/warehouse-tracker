@@ -18,6 +18,10 @@ PERSIAN_MONTHS = [
 def today_jalali():
     return jdatetime.date.today()
 
+def first_weekday_of_month(year, month):
+    """Weekday of the 1st of the given Jalali month.
+    Uses jdatetime's convention: Saturday=0 ... Friday=6."""
+    return jdatetime.date(year, month, 1).weekday()
 
 def days_in_month(year, month):
     """Number of days in a given Jalali month/year."""
