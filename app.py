@@ -16,6 +16,7 @@ import persian_date as pdate
 import db
 import importer
 import fonts
+import openpyxl
 
 try:
     from tkinterdnd2 import DND_FILES, TkinterDnD
@@ -142,28 +143,19 @@ class WarehouseApp(BaseTk):
         upload_card.pack(fill="x", pady=(0, 12))
         self._build_upload_section(upload_card)
 
+        
         # ----- Search card -----
         search_card = ttk.Frame(body, style="Card.TFrame")
         search_card.pack(fill="x", pady=(0, 12))
         self._build_search_section(search_card)
-        
 
        # ----- Bottom area (50/50) -----
         bottom = ttk.Frame(body)
         bottom.pack(fill="both", expand=True)
 
-        bottom.grid_rowconfigure(0, weight=1)  # History
+        bottom.grid_rowconfigure(0, weight=1, minsize=180)  # History
         bottom.grid_rowconfigure(1, weight=2, minsize=320)  # Date Search
         bottom.grid_columnconfigure(0, weight=1)
-
-        # ----- History card -----
-        history_card = ttk.Frame(bottom, style="Card.TFrame")
-        history_card.grid(row=0, column=0, sticky="nsew", pady=(0, 6))
-        history_card.grid_rowconfigure(0, weight=1)
-        history_card.grid_columnconfigure(0, weight=1)
-
-        self._build_history_section(history_card)
-
         # ----- Date search card -----
         date_card = ttk.Frame(bottom, style="Card.TFrame")
         date_card.grid(row=1, column=0, sticky="nsew", pady=(6, 0))
@@ -175,6 +167,16 @@ class WarehouseApp(BaseTk):
         self.status_var = tk.StringVar(value="آماده")
         status_bar = ttk.Label(self, textvariable=self.status_var, style="Status.TLabel", anchor="e", padding=(16, 6))
         status_bar.pack(fill="x", side="bottom")
+        
+        # ----- History card -----
+        history_card = ttk.Frame(bottom, style="Card.TFrame")
+        history_card.grid(row=0, column=0, sticky="nsew", pady=(0, 6))
+        history_card.grid_rowconfigure(0, weight=1)
+        history_card.grid_columnconfigure(0, weight=1)
+
+        self._build_history_section(history_card)
+
+        
 
     def _card_padding(self, card, pady=12):
         wrapper = ttk.Frame(card, style="Card.TFrame")
@@ -396,7 +398,7 @@ class WarehouseApp(BaseTk):
         table_frame.pack(fill="both", expand=True, pady=(10, 0))
 
         hist_columns = ("changed_at", "location")
-        self.history_tree = ttk.Treeview(table_frame, columns=hist_columns, show="headings", height=18)
+        self.history_tree = ttk.Treeview(table_frame, columns=hist_columns, show="headings", height=12)
         hist_headings = {
             "changed_at": "تاریخ تغییر",
             "location": "موقعیت",
@@ -436,8 +438,9 @@ class WarehouseApp(BaseTk):
 
 
     # --- Date search section (Persian calendar) ---
+  
     def _build_date_search_section(self, card):
-        wrapper = self._card_padding(card, pady=12)
+        wrapper = self._card_padding(card, pady=2)
 
         ttk.Label(wrapper, text="جستجو بر اساس تاریخ", style="Section.TLabel").pack(anchor="e")
         ttk.Label(
@@ -447,34 +450,32 @@ class WarehouseApp(BaseTk):
         ).pack(anchor="e", pady=(2, 8))
 
         today = pdate.today_jalali()
+        self.selected_jalali_year = today.year
+        self.selected_jalali_month = today.month
+        self.selected_jalali_day = today.day
+        self._picker_year = today.year
+        self._picker_month = today.month
+        self._calendar_win = None
 
         row = ttk.Frame(wrapper, style="Card.TFrame")
         row.pack(fill="x")
 
-        ttk.Button(row, text="نمایش", style="Accent.TButton", command=self._search_by_date).pack(side="left")
-
-        self.day_var = tk.StringVar(value=str(today.day))
-        self.day_combo = ttk.Combobox(
-            row, textvariable=self.day_var, width=4, state="readonly", justify="center",
-            values=[str(d) for d in range(1, pdate.days_in_month(today.year, today.month) + 1)],
+        ttk.Button(row, text="امروز", style="Secondary.TButton", command=self._jump_to_today).pack(
+            side="left", padx=(8, 0)
         )
-        self.day_combo.pack(side="left", padx=(8, 4))
-
-        self.month_var = tk.StringVar(value=pdate.PERSIAN_MONTHS[today.month - 1])
-        self.month_combo = ttk.Combobox(
-            row, textvariable=self.month_var, width=10, state="readonly", justify="center",
-            values=pdate.PERSIAN_MONTHS,
+        ttk.Button(row, text="خروجی اکسل", style="Secondary.TButton", command=self._export_date_results).pack(
+            side="left", padx=(8, 0)
         )
-        self.month_combo.pack(side="left", padx=4)
-        self.month_combo.bind("<<ComboboxSelected>>", self._on_date_part_change)
 
-        self.year_var = tk.StringVar(value=str(today.year))
-        self.year_combo = ttk.Combobox(
-            row, textvariable=self.year_var, width=6, state="readonly", justify="center",
-            values=[str(y) for y in range(today.year - 5, today.year + 1)],
+        self.date_display_var = tk.StringVar()
+        self._refresh_date_display()
+        self.date_picker_btn = tk.Button(
+            row, textvariable=self.date_display_var, font=self.f_bold,
+            bg="#EAF0FB", fg=NAVY, relief="flat", bd=0, padx=14, pady=6,
+            cursor="hand2", activebackground="#DCE7FA", activeforeground=NAVY,
+            command=self._toggle_calendar,
         )
-        self.year_combo.pack(side="left", padx=4)
-        self.year_combo.bind("<<ComboboxSelected>>", self._on_date_part_change)
+        self.date_picker_btn.pack(side="left", padx=8)
 
         ttk.Label(row, text="تاریخ:", style="Card.TLabel").pack(side="left", padx=(0, 8))
 
@@ -484,28 +485,13 @@ class WarehouseApp(BaseTk):
         table_frame = ttk.Frame(wrapper, style="Card.TFrame")
         table_frame.pack(fill="both", expand=True)
 
-        columns = (
-            "type",
-            "name",
-            "code",
-            "previous_location",
-            "location",
-        )
-        self.date_results_tree = ttk.Treeview(table_frame, columns=columns, show="headings", height=8)
+        columns = ("type", "name", "code", "previous", "location")
+        self.date_results_tree = ttk.Treeview(table_frame, columns=columns, show="headings", height=12)
         headings = {
-            "type": "نوع",
-            "name": "نام کالا",
-            "code": "کد فنی",
-            "previous_location": "موقعیت قبلی",
-            "location": "موقعیت جدید",
+            "type": "نوع", "name": "نام کالا", "code": "کد فنی",
+            "previous": "موقعیت قبلی", "location": "موقعیت جدید",
         }
-        widths = {
-            "type": 120,
-            "name": 280,
-            "code": 130,
-            "previous_location": 180,
-            "location": 180,
-        }
+        widths = {"type": 110, "name": 260, "code": 120, "previous": 150, "location": 150}
         for col in columns:
             self.date_results_tree.heading(col, text=headings[col])
             self.date_results_tree.column(col, width=widths[col], anchor="center")
@@ -516,18 +502,142 @@ class WarehouseApp(BaseTk):
         self.date_results_tree.pack(side="left", fill="both", expand=True)
         dvsb.pack(side="right", fill="y")
 
-    def _on_date_part_change(self, event):
-        year = int(self.year_var.get())
-        month = pdate.PERSIAN_MONTHS.index(self.month_var.get()) + 1
-        max_day = pdate.days_in_month(year, month)
-        self.day_combo.configure(values=[str(d) for d in range(1, max_day + 1)])
-        if int(self.day_var.get()) > max_day:
-            self.day_var.set(str(max_day))
+        self._search_by_date()
+
+    def _refresh_date_display(self):
+        self.date_display_var.set(
+            f"\U0001F4C5  {self.selected_jalali_day} {pdate.PERSIAN_MONTHS[self.selected_jalali_month - 1]} {self.selected_jalali_year}"
+        )
+
+    def _jump_to_today(self):
+        today = pdate.today_jalali()
+        self.selected_jalali_year = today.year
+        self.selected_jalali_month = today.month
+        self.selected_jalali_day = today.day
+        self._refresh_date_display()
+        self._search_by_date()
+
+    def _toggle_calendar(self):
+        if self._calendar_win is not None:
+            self._close_calendar()
+        else:
+            self._open_calendar()
+
+    def _open_calendar(self):
+        self._picker_year = self.selected_jalali_year
+        self._picker_month = self.selected_jalali_month
+
+        self._calendar_win = tk.Toplevel(self)
+        self._calendar_win.overrideredirect(True)
+        self._calendar_win.attributes("-topmost", True)
+        border = tk.Frame(self._calendar_win, bg=NAVY)
+        border.pack(fill="both", expand=True)
+        self._calendar_inner = tk.Frame(border, bg=WHITE)
+        self._calendar_inner.pack(fill="both", expand=True, padx=1, pady=1)
+
+        self._render_calendar()
+
+        self.update_idletasks()
+        x = self.date_picker_btn.winfo_rootx()
+        y = self.date_picker_btn.winfo_rooty() + self.date_picker_btn.winfo_height() + 2
+        self._calendar_win.geometry(f"+{x}+{y}")
+
+        self._calendar_win.bind("<FocusOut>", lambda e: self.after(150, self._close_calendar))
+        self._calendar_win.focus_set()
+
+    def _close_calendar(self):
+        if self._calendar_win is not None:
+            self._calendar_win.destroy()
+            self._calendar_win = None
+
+    def _render_calendar(self):
+        for widget in self._calendar_inner.winfo_children():
+            widget.destroy()
+
+        header = tk.Frame(self._calendar_inner, bg=NAVY)
+        header.pack(fill="x")
+        tk.Button(
+            header, text="ماه بعد \u25B6", font=self.f_small, bg=NAVY, fg=WHITE, relief="flat",
+            activebackground=BLUE_HOVER, activeforeground=WHITE, bd=0, cursor="hand2",
+            command=self._picker_next_month,
+        ).pack(side="left", padx=6, pady=6)
+        tk.Label(
+            header, text=f"{pdate.PERSIAN_MONTHS[self._picker_month - 1]} {self._picker_year}",
+            font=self.f_bold, bg=NAVY, fg=WHITE,
+        ).pack(side="left", expand=True, pady=6)
+        tk.Button(
+            header, text="\u25C0 ماه قبل", font=self.f_small, bg=NAVY, fg=WHITE, relief="flat",
+            activebackground=BLUE_HOVER, activeforeground=WHITE, bd=0, cursor="hand2",
+            command=self._picker_prev_month,
+        ).pack(side="right", padx=6, pady=6)
+
+        grid = tk.Frame(self._calendar_inner, bg=WHITE)
+        grid.pack(padx=8, pady=8)
+
+        weekday_labels_by_display_col = ["ج", "پ", "چ", "س", "د", "ی", "ش"]
+        for col, wd in enumerate(weekday_labels_by_display_col):
+            tk.Label(grid, text=wd, font=self.f_bold, bg=WHITE, fg=TEXT_MUTED, width=4).grid(
+                row=0, column=col, pady=(0, 2)
+            )
+
+        first_weekday = pdate.first_weekday_of_month(self._picker_year, self._picker_month)
+        days_count = pdate.days_in_month(self._picker_year, self._picker_month)
+        today = pdate.today_jalali()
+
+        row_i = 1
+        col_i = 6 - first_weekday
+        for day in range(1, days_count + 1):
+            is_today = (
+                self._picker_year == today.year and self._picker_month == today.month and day == today.day
+            )
+            is_selected = (
+                self._picker_year == self.selected_jalali_year
+                and self._picker_month == self.selected_jalali_month
+                and day == self.selected_jalali_day
+            )
+
+            if is_selected:
+                bg, fg = BLUE, WHITE
+            elif is_today:
+                bg, fg = "#EAF0FB", NAVY
+            else:
+                bg, fg = WHITE, TEXT_DARK
+
+            cell = tk.Label(grid, text=str(day), font=self.f_normal, bg=bg, fg=fg, width=4, height=1, cursor="hand2")
+            cell.grid(row=row_i, column=col_i, padx=1, pady=1)
+            cell.bind("<Button-1>", lambda e, d=day: self._pick_day(d))
+
+            col_i -= 1
+            if col_i < 0:
+                col_i = 6
+                row_i += 1
+
+    def _picker_next_month(self):
+        self._picker_month += 1
+        if self._picker_month > 12:
+            self._picker_month = 1
+            self._picker_year += 1
+        self._render_calendar()
+
+    def _picker_prev_month(self):
+        self._picker_month -= 1
+        if self._picker_month < 1:
+            self._picker_month = 12
+            self._picker_year -= 1
+        self._render_calendar()
+
+    def _pick_day(self, day):
+        self.selected_jalali_year = self._picker_year
+        self.selected_jalali_month = self._picker_month
+        self.selected_jalali_day = day
+        self._refresh_date_display()
+        self._close_calendar()
+        self._search_by_date()
 
     def _search_by_date(self):
-        year = int(self.year_var.get())
-        month = pdate.PERSIAN_MONTHS.index(self.month_var.get()) + 1
-        day = int(self.day_var.get())
+        year = self.selected_jalali_year
+        month = self.selected_jalali_month
+        day = self.selected_jalali_day
         gregorian_str = pdate.jalali_to_gregorian_str(year, month, day)
 
         for row in self.date_results_tree.get_children():
@@ -566,11 +676,51 @@ class WarehouseApp(BaseTk):
 
         total = len(new_parts) + len(changes)
         if total == 0:
-            self.date_results_label_var.set(f"{day} {self.month_var.get()} {year} — هیچ موردی ثبت نشده است")
+            self.date_results_label_var.set("هیچ موردی در این تاریخ ثبت نشده است")
         else:
             self.date_results_label_var.set(
-                f"{day} {self.month_var.get()} {year} — {len(new_parts)} کالای جدید، {len(changes)} تغییر موقعیت"
+                f"کالای جدید: {len(new_parts)}        تغییر موقعیت: {len(changes)}"
             )
+    def _export_date_results(self):
+        rows = self.date_results_tree.get_children()
+        if not rows:
+            messagebox.showinfo("خروجی اکسل", "نتیجه‌ای برای خروجی گرفتن وجود ندارد. ابتدا جستجو کنید.")
+            return
+
+        year = self.selected_jalali_year
+        month_name = pdate.PERSIAN_MONTHS[self.selected_jalali_month - 1]
+        day = self.selected_jalali_day
+        default_name = f"گزارش {day} {month_name} {year}.xlsx"
+
+        filepath = filedialog.asksaveasfilename(
+            title="ذخیره خروجی اکسل",
+            defaultextension=".xlsx",
+            initialfile=default_name,
+            filetypes=[("فایل اکسل", "*.xlsx")],
+        )
+        if not filepath:
+            return
+
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = "گزارش"
+        ws.append(["نوع", "نام کالا", "کد فنی", "موقعیت قبلی", "موقعیت جدید"])
+        for iid in rows:
+            values = self.date_results_tree.item(iid)["values"]
+            ws.append(list(values))
+
+        column_letters = ["A", "B", "C", "D", "E"]
+        widths = [14, 32, 16, 18, 18]
+        for letter, w in zip(column_letters, widths):
+            ws.column_dimensions[letter].width = w
+
+        try:
+            wb.save(filepath)
+        except Exception as e:
+            messagebox.showerror("خطا", f"ذخیره فایل با خطا مواجه شد:\n{e}")
+            return
+
+        messagebox.showinfo("خروجی اکسل", f"فایل با موفقیت ذخیره شد:\n{filepath}")
 
 
 
