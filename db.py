@@ -214,24 +214,37 @@ def get_new_parts_by_date(gregorian_date_str):
 
 def get_location_changes_by_date(gregorian_date_str):
     """Return location changes (joined with the product name) that
-    happened on the given Gregorian date (format 'YYYY-MM-DD').
+    happened on the given Gregorian date.
 
-    A brand-new part's first history entry is excluded here - that's
-    a new addition, not a "change", and is covered separately by
-    get_new_parts_by_date().
+    Also returns the previous location before the change.
     """
     conn = get_connection()
     cur = conn.cursor()
-    cur.execute(
-        """SELECT lh.code AS code, p.name AS name, lh.location AS location, lh.changed_at AS changed_at
-           FROM location_history lh
-           JOIN parts p ON p.code = lh.code
-           WHERE date(lh.changed_at) = ?
-             AND lh.location IS NOT NULL AND TRIM(lh.location) != ''
-             AND date(p.created_at) != date(lh.changed_at)
-           ORDER BY p.name COLLATE NOCASE""",
-        (gregorian_date_str,),
-    )
+
+    cur.execute("""
+        SELECT
+            curr.code,
+            p.name,
+            curr.location,
+            curr.changed_at,
+            (
+                SELECT prev.location
+                FROM location_history prev
+                WHERE prev.code = curr.code
+                  AND prev.changed_at < curr.changed_at
+                ORDER BY prev.changed_at DESC
+                LIMIT 1
+            ) AS previous_location
+        FROM location_history curr
+        JOIN parts p
+            ON p.code = curr.code
+        WHERE date(curr.changed_at) = ?
+          AND curr.location IS NOT NULL
+          AND TRIM(curr.location) != ''
+          AND date(p.created_at) != date(curr.changed_at)
+        ORDER BY p.name COLLATE NOCASE
+    """, (gregorian_date_str,))
+
     rows = cur.fetchall()
     conn.close()
     return rows

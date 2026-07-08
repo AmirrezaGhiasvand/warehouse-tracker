@@ -48,7 +48,7 @@ class WarehouseApp(BaseTk):
         super().__init__()
         self.title(APP_TITLE)
         self.geometry("1150x880")
-        self.minsize(950, 700)
+        self.minsize(1100, 850)
         self.configure(bg=BG)
 
         db.init_db()
@@ -62,7 +62,6 @@ class WarehouseApp(BaseTk):
         self._current_code = None
 
         self._build_ui()
-        self._refresh_upload_log()
 
     # ---------- Styling ----------
 
@@ -148,23 +147,30 @@ class WarehouseApp(BaseTk):
         search_card.pack(fill="x", pady=(0, 12))
         self._build_search_section(search_card)
         
-        # ----- Date search card -----
-        date_card = ttk.Frame(body, style="Card.TFrame")
-        date_card.pack(fill="x", pady=(0, 12))
-        self._build_date_search_section(date_card)
 
-        # ----- History (big) / Upload log (small) -----
-        paned = ttk.PanedWindow(body, orient="vertical")
-        paned.pack(fill="both", expand=True)
+       # ----- Bottom area (50/50) -----
+        bottom = ttk.Frame(body)
+        bottom.pack(fill="both", expand=True)
 
-        history_card = ttk.Frame(paned, style="Card.TFrame")
-        log_card = ttk.Frame(paned, style="Card.TFrame")
+        bottom.grid_rowconfigure(0, weight=1)  # History
+        bottom.grid_rowconfigure(1, weight=2, minsize=320)  # Date Search
+        bottom.grid_columnconfigure(0, weight=1)
 
-        paned.add(history_card, weight=4)
-        paned.add(log_card, weight=1)
+        # ----- History card -----
+        history_card = ttk.Frame(bottom, style="Card.TFrame")
+        history_card.grid(row=0, column=0, sticky="nsew", pady=(0, 6))
+        history_card.grid_rowconfigure(0, weight=1)
+        history_card.grid_columnconfigure(0, weight=1)
 
         self._build_history_section(history_card)
-        self._build_log_section(log_card)
+
+        # ----- Date search card -----
+        date_card = ttk.Frame(bottom, style="Card.TFrame")
+        date_card.grid(row=1, column=0, sticky="nsew", pady=(6, 0))
+        date_card.grid_rowconfigure(0, weight=2)
+        date_card.grid_columnconfigure(0, weight=2)
+
+        self._build_date_search_section(date_card)
 
         self.status_var = tk.StringVar(value="آماده")
         status_bar = ttk.Label(self, textvariable=self.status_var, style="Status.TLabel", anchor="e", padding=(16, 6))
@@ -379,6 +385,56 @@ class WarehouseApp(BaseTk):
         self._hide_suggestions()
         self._clear_history()
 
+    
+    # --- History section (now the main focus of the app) ---
+    def _build_history_section(self, card):
+        wrapper = self._card_padding(card)
+        self.history_label_var = tk.StringVar(value="تاریخچه موقعیت: (یک کالا را جستجو کنید)")
+        ttk.Label(wrapper, textvariable=self.history_label_var, style="Section.TLabel").pack(anchor="e")
+
+        table_frame = ttk.Frame(wrapper, style="Card.TFrame")
+        table_frame.pack(fill="both", expand=True, pady=(10, 0))
+
+        hist_columns = ("changed_at", "location")
+        self.history_tree = ttk.Treeview(table_frame, columns=hist_columns, show="headings", height=18)
+        hist_headings = {
+            "changed_at": "تاریخ تغییر",
+            "location": "موقعیت",
+        }
+        widths = {"changed_at": 280, "location": 400}
+        for col in hist_columns:
+            self.history_tree.heading(col, text=hist_headings[col])
+            self.history_tree.column(col, width=widths[col], anchor="center")
+        self.history_tree.tag_configure("odd", background=ROW_ALT)
+
+        hvsb = ttk.Scrollbar(table_frame, orient="vertical", command=self.history_tree.yview)
+        self.history_tree.configure(yscrollcommand=hvsb.set)
+        self.history_tree.pack(side="left", fill="both", expand=True)
+        hvsb.pack(side="right", fill="y")
+
+    def _load_history(self, code, name):
+        for row in self.history_tree.get_children():
+            self.history_tree.delete(row)
+
+        history = db.get_history(code)
+        for i, h in enumerate(history):
+            tag = "odd" if i % 2 else ""
+            self.history_tree.insert(
+                "", "end", tags=(tag,),
+                values=(h["changed_at"], h["location"]),
+            )
+
+        if history:
+            self.history_label_var.set(f"تاریخچه موقعیت: {name} ({code}) — {len(history)} رکورد")
+        else:
+            self.history_label_var.set(f"تاریخچه موقعیت: {name} ({code}) — هیچ سابقه‌ای ثبت نشده است")
+
+    def _clear_history(self):
+        for row in self.history_tree.get_children():
+            self.history_tree.delete(row)
+        self.history_label_var.set("تاریخچه موقعیت: (یک کالا را جستجو کنید)")
+
+
     # --- Date search section (Persian calendar) ---
     def _build_date_search_section(self, card):
         wrapper = self._card_padding(card, pady=12)
@@ -428,10 +484,28 @@ class WarehouseApp(BaseTk):
         table_frame = ttk.Frame(wrapper, style="Card.TFrame")
         table_frame.pack(fill="both", expand=True)
 
-        columns = ("type", "name", "code", "location")
+        columns = (
+            "type",
+            "name",
+            "code",
+            "previous_location",
+            "location",
+        )
         self.date_results_tree = ttk.Treeview(table_frame, columns=columns, show="headings", height=8)
-        headings = {"type": "نوع", "name": "نام کالا", "code": "کد فنی", "location": "موقعیت"}
-        widths = {"type": 120, "name": 300, "code": 130, "location": 180}
+        headings = {
+            "type": "نوع",
+            "name": "نام کالا",
+            "code": "کد فنی",
+            "previous_location": "موقعیت قبلی",
+            "location": "موقعیت جدید",
+        }
+        widths = {
+            "type": 120,
+            "name": 280,
+            "code": 130,
+            "previous_location": 180,
+            "location": 180,
+        }
         for col in columns:
             self.date_results_tree.heading(col, text=headings[col])
             self.date_results_tree.column(col, width=widths[col], anchor="center")
@@ -467,14 +541,26 @@ class WarehouseApp(BaseTk):
             tag = "odd" if i % 2 else ""
             self.date_results_tree.insert(
                 "", "end", tags=(tag,),
-                values=("کالای جدید", p["name"], p["code"], p["location"] or "—"),
+                values=(
+                "کالای جدید",
+                p["name"],
+                p["code"],
+                "—",
+                p["location"] or "—",
+            ),
             )
             i += 1
         for c in changes:
             tag = "odd" if i % 2 else ""
             self.date_results_tree.insert(
                 "", "end", tags=(tag,),
-                values=("تغییر موقعیت", c["name"], c["code"], c["location"]),
+                values=(
+                "تغییر موقعیت",
+                c["name"],
+                c["code"],
+                c["previous_location"] or "—",
+                c["location"],
+            ),
             )
             i += 1
 
@@ -487,79 +573,6 @@ class WarehouseApp(BaseTk):
             )
 
 
-    # --- History section (now the main focus of the app) ---
-    def _build_history_section(self, card):
-        wrapper = self._card_padding(card)
-        self.history_label_var = tk.StringVar(value="تاریخچه موقعیت: (یک کالا را جستجو کنید)")
-        ttk.Label(wrapper, textvariable=self.history_label_var, style="Section.TLabel").pack(anchor="e")
-
-        table_frame = ttk.Frame(wrapper, style="Card.TFrame")
-        table_frame.pack(fill="both", expand=True, pady=(10, 0))
-
-        hist_columns = ("changed_at", "location")
-        self.history_tree = ttk.Treeview(table_frame, columns=hist_columns, show="headings", height=18)
-        hist_headings = {
-            "changed_at": "تاریخ تغییر",
-            "location": "موقعیت",
-        }
-        widths = {"changed_at": 280, "location": 400}
-        for col in hist_columns:
-            self.history_tree.heading(col, text=hist_headings[col])
-            self.history_tree.column(col, width=widths[col], anchor="center")
-        self.history_tree.tag_configure("odd", background=ROW_ALT)
-
-        hvsb = ttk.Scrollbar(table_frame, orient="vertical", command=self.history_tree.yview)
-        self.history_tree.configure(yscrollcommand=hvsb.set)
-        self.history_tree.pack(side="left", fill="both", expand=True)
-        hvsb.pack(side="right", fill="y")
-
-    def _load_history(self, code, name):
-        for row in self.history_tree.get_children():
-            self.history_tree.delete(row)
-
-        history = db.get_history(code)
-        for i, h in enumerate(history):
-            tag = "odd" if i % 2 else ""
-            self.history_tree.insert(
-                "", "end", tags=(tag,),
-                values=(h["changed_at"], h["location"]),
-            )
-
-        if history:
-            self.history_label_var.set(f"تاریخچه موقعیت: {name} ({code}) — {len(history)} رکورد")
-        else:
-            self.history_label_var.set(f"تاریخچه موقعیت: {name} ({code}) — هیچ سابقه‌ای ثبت نشده است")
-
-    def _clear_history(self):
-        for row in self.history_tree.get_children():
-            self.history_tree.delete(row)
-        self.history_label_var.set("تاریخچه موقعیت: (یک کالا را جستجو کنید)")
-
-    # --- Upload log section (compact) ---
-    def _build_log_section(self, card):
-        wrapper = self._card_padding(card, pady=10)
-        ttk.Label(wrapper, text="تاریخچه بارگذاری‌ها", style="Section.TLabel").pack(anchor="e")
-
-        table_frame = ttk.Frame(wrapper, style="Card.TFrame")
-        table_frame.pack(fill="both", expand=True, pady=(8, 0))
-
-        log_columns = ("uploaded_at", "filename", "row_count", "new_parts", "location_changes")
-        self.log_tree = ttk.Treeview(table_frame, columns=log_columns, show="headings", height=5)
-        log_headings = {
-            "uploaded_at": "تاریخ/ساعت",
-            "filename": "نام فایل",
-            "row_count": "تعداد ردیف",
-            "new_parts": "کالای جدید",
-            "location_changes": "تغییر موقعیت",
-        }
-        for col in log_columns:
-            self.log_tree.heading(col, text=log_headings[col])
-            self.log_tree.column(col, width=150, anchor="center")
-
-        lvsb = ttk.Scrollbar(table_frame, orient="vertical", command=self.log_tree.yview)
-        self.log_tree.configure(yscrollcommand=lvsb.set)
-        self.log_tree.pack(side="left", fill="both", expand=True)
-        lvsb.pack(side="right", fill="y")
 
     # ---------- Upload behavior ----------
 
@@ -603,7 +616,6 @@ class WarehouseApp(BaseTk):
                 )
                 messagebox.showinfo("بارگذاری با موفقیت انجام شد", msg)
                 self.status_var.set("بارگذاری با موفقیت انجام شد")
-                self._refresh_upload_log()
                 # refresh currently viewed product's history, if any
                 if self._current_code:
                     part = db.get_part(self._current_code)
