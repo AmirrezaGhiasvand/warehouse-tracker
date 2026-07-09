@@ -1,4 +1,5 @@
-![Uploading {3696C6B0-AC9B-495A-B0EA-E70CBCBEA172}.png…]()
+<img width="1920" height="1058" alt="pic" src="https://github.com/user-attachments/assets/2a265c95-4a23-4501-88a1-c243de0312e7" />
+
 # Warehouse Tracker
 
 A lightweight desktop app for a storage/warehouse department to track product
