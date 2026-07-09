@@ -1,3 +1,4 @@
+![Uploading {3696C6B0-AC9B-495A-B0EA-E70CBCBEA172}.png…]()
 # Warehouse Tracker
 
 A lightweight desktop app for a storage/warehouse department to track product
