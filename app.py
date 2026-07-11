@@ -68,11 +68,12 @@ class WarehouseApp(BaseTk):
 
     def _setup_styles(self):
         f = self.font_family
-        self.f_normal = (f, 10)
-        self.f_bold = (f, 10, "bold")
+        self.f_normal = (f, 11, "bold")
+        self.f_bold = (f, 12, "bold")
         self.f_title = (f, 16, "bold")
         self.f_section = (f, 12, "bold")
-        self.f_small = (f, 9)
+        self.f_small = (f, 10, "bold")
+        self.f_small2 = (f, 9, "bold")
 
         style = ttk.Style(self)
         try:
@@ -477,7 +478,7 @@ class WarehouseApp(BaseTk):
         )
         self.date_picker_btn.pack(side="left", padx=8)
 
-        ttk.Label(row, text="تاریخ:", style="Card.TLabel").pack(side="left", padx=(0, 8))
+        ttk.Label(row, text=": تاریخ", style="Card.TLabel").pack(side="left", padx=(0, 8))
 
         self.date_results_label_var = tk.StringVar(value="")
         ttk.Label(wrapper, textvariable=self.date_results_label_var, style="Muted.TLabel").pack(anchor="e", pady=(8, 4))
@@ -557,7 +558,7 @@ class WarehouseApp(BaseTk):
         header = tk.Frame(self._calendar_inner, bg=NAVY)
         header.pack(fill="x")
         tk.Button(
-            header, text="ماه بعد \u25B6", font=self.f_small, bg=NAVY, fg=WHITE, relief="flat",
+            header, text="ماه بعد \u25B6", font=self.f_small2, bg=NAVY, fg=WHITE, relief="flat",
             activebackground=BLUE_HOVER, activeforeground=WHITE, bd=0, cursor="hand2",
             command=self._picker_next_month,
         ).pack(side="left", padx=6, pady=6)
@@ -566,7 +567,7 @@ class WarehouseApp(BaseTk):
             font=self.f_bold, bg=NAVY, fg=WHITE,
         ).pack(side="left", expand=True, pady=6)
         tk.Button(
-            header, text="\u25C0 ماه قبل", font=self.f_small, bg=NAVY, fg=WHITE, relief="flat",
+            header, text="\u25C0 ماه قبل", font=self.f_small2, bg=NAVY, fg=WHITE, relief="flat",
             activebackground=BLUE_HOVER, activeforeground=WHITE, bd=0, cursor="hand2",
             command=self._picker_prev_month,
         ).pack(side="right", padx=6, pady=6)
@@ -576,7 +577,7 @@ class WarehouseApp(BaseTk):
 
         weekday_labels_by_display_col = ["ج", "پ", "چ", "س", "د", "ی", "ش"]
         for col, wd in enumerate(weekday_labels_by_display_col):
-            tk.Label(grid, text=wd, font=self.f_bold, bg=WHITE, fg=TEXT_MUTED, width=4).grid(
+            tk.Label(grid, text=wd, font=self.f_small2, bg=WHITE, fg=TEXT_MUTED, width=4).grid(
                 row=0, column=col, pady=(0, 2)
             )
 
@@ -603,7 +604,7 @@ class WarehouseApp(BaseTk):
             else:
                 bg, fg = WHITE, TEXT_DARK
 
-            cell = tk.Label(grid, text=str(day), font=self.f_normal, bg=bg, fg=fg, width=4, height=1, cursor="hand2")
+            cell = tk.Label(grid, text=str(day), font=self.f_small2, bg=bg, fg=fg, width=4, height=1, cursor="hand2")
             cell.grid(row=row_i, column=col_i, padx=1, pady=1)
             cell.bind("<Button-1>", lambda e, d=day: self._pick_day(d))
 
